@@ -21,12 +21,12 @@ let rec fv :term ->StringSet.t = function
      | Abstraction(a,t) -> StringSet.remove a (fv(t))
      | Application(t1,t2) -> StringSet.union (fv(t1)) (fv(t2))
 
-let fresh_var names_in_use =
+let fresh_var (names_in_use: StringSet.t) =
         let possible_variables_set = StringSet.of_list possible_variables in
-        let unused_names = StringSet.diff names_in_use possible_variables_set in
-        if StringSet.is_empty unused_names then raiseOutOfVariablesError else StringSet.choose unused_names
+        let unused_names = StringSet.diff possible_variables_set names_in_use in
+        if StringSet.is_empty unused_names then raise OutOfVariablesError else StringSet.choose unused_names
 
-let rec substitute x t1 t2 = match t2 with
+let rec substitute (x: string) (t1: term) (t2:term)  = match t2 with
         | Variable y -> if x=y then t1 else Variable y
         | Abstraction (y, t2) -> if x=y then Abstraction (y, t2) 
                                  else if not (StringSet.mem y (fv t1)) then Abstraction(y, substitute x t1 t2)
@@ -38,6 +38,17 @@ let rec substitute x t1 t2 = match t2 with
                                          let s2 = substitute x t1 s1 in
                                          Abstraction (z,s2)
         | Application (s1, s2) -> Application ((substitute x t1 s1), (substitute x t1 s2))
-        
 
+let rec reduce_strict (t: term) : term option = match t with
+        | Variable x -> None 
+        | Abstraction(x, s) -> None
+        | Application(t1, t2) -> let t1_optional = reduce_strict t1 in (match t1_optional with
+                | Some t1_tmp -> Some (Application(t1_tmp, t2))
+                | None -> let t2_optional = reduce_strict t2 in (match t2_optional with
+                        | Some t2_tmp -> Some (Application(t1, t2_tmp))
+                        | None -> match t with
+                                | Application(Abstraction(y, t12), t2) -> Some(substitute y t2 t12)
+                                | _ -> None
+                )
+        )
 
